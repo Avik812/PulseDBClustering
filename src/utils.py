@@ -1,16 +1,18 @@
+import os
 import numpy as np
-import pandas as pd
 
-def load_segments_csv(path, values_col='values'):
+def load_npy_segments(folder_path):
     """
-    Expect CSV with columns: segment_id, values (string repr of list or JSON)
+    Load all .npy segment files and ensure numeric 1-D arrays.
+    Non-numeric values are removed. Empty segments are skipped.
     """
-    df = pd.read_csv(path)
-    df[values_col] = df[values_col].apply(lambda s: np.array(eval(s)) if isinstance(s, str) else np.array(s))
-    return df
-
-def save_clusters(clusters, out_path):
-    import json
-    serial = {f'cluster_{i}': [int(x) for x in cl] for i, cl in enumerate(clusters)}
-    with open(out_path, 'w') as f:
-        json.dump(serial, f, indent=2)
+    segments = []
+    files = sorted([f for f in os.listdir(folder_path) if f.endswith(".npy")])
+    for fname in files:
+        seg = np.load(os.path.join(folder_path, fname), allow_pickle=True)
+        seg = np.array(seg).flatten()
+        # Keep only numeric values
+        seg = np.array([float(x) for x in seg if isinstance(x, (int, float, np.integer, np.floating))])
+        if len(seg) > 0:
+            segments.append(seg)
+    return segments
