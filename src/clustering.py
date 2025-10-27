@@ -1,32 +1,36 @@
-from fastdtw import fastdtw
-from scipy.spatial.distance import euclidean
 import numpy as np
+from scipy.spatial.distance import euclidean
+from fastdtw import fastdtw
+from tqdm import tqdm
 
-def divide_and_conquer_clustering(segments, threshold=10):
-    """
-    Recursively cluster segments using a divide-and-conquer approach based on DTW.
-    """
-    if len(segments) <= 1:
+def similarity(ts1, ts2, method="dtw"):
+    """Compute similarity (lower = more similar)."""
+    if method == "correlation":
+        corr = np.corrcoef(ts1, ts2)[0, 1]
+        return 1 - corr
+    elif method == "euclidean":
+        return euclidean(ts1, ts2)
+    else:  # DTW
+        dist, _ = fastdtw(ts1, ts2)
+        return dist
+
+def select_pivot(segments):
+    idx = np.random.randint(0, len(segments))
+    return segments[idx]
+
+def divide_and_conquer_cluster(segments, depth=0, max_size=10, method="dtw"):
+    """Recursively cluster time-series using divide-and-conquer."""
+    if len(segments) <= max_size:
         return [segments]
 
-    # Compute pairwise DTW distances
-    n = len(segments)
-    dist_matrix = np.zeros((n, n))
-    for i in range(n):
-        for j in range(i+1, n):
-            a = np.array(segments[i]).flatten()
-            b = np.array(segments[j]).flatten()
-            dist, _ = fastdtw(a, b, dist=euclidean)
-            dist_matrix[i, j] = dist
-            dist_matrix[j, i] = dist
+    pivot = select_pivot(segments)
+    distances = [similarity(pivot, s, method) for s in tqdm(segments, disable=(depth > 0))]
+    median = np.median(distances)
 
-    median_dist = np.median(dist_matrix)
+    left = [s for i, s in enumerate(segments) if distances[i] <= median]
+    right = [s for i, s in enumerate(segments) if distances[i] > median]
 
-    # If segments are very dissimilar, split into halves
-    if median_dist > threshold and n > 1:
-        cluster1 = segments[:n//2]
-        cluster2 = segments[n//2:]
-        return divide_and_conquer_clustering(cluster1, threshold) + \
-               divide_and_conquer_clustering(cluster2, threshold)
-    else:
-        return [segments]
+    clusters_left = divide_and_conquer_cluster(left, depth + 1, max_size, method)
+    clusters_right = divide_and_conquer_cluster(right, depth + 1, max_size, method)
+
+    return clusters_left + clusters_right
